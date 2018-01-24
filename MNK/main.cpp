@@ -9,36 +9,77 @@
 #include <ctime>
 
 const double Pi = 3.14;
-const int ssize = 2;//кол-во точек
+const int ssize = 4;//кол-во точек
 double mistake = 0.5;
-int chicken = 20;//вероятность ошибки
+int chicken = 5;//вероятность ошибки
 int distribution = 1;//тип ошибки
 double cock_x, cock_y; // переменные для корректной отрисовки функции
+int power_of_polynom = 3;//полином 3й степени, от 0 до 3 степени,иными словами размерность вектора
+const double lambda = 0.005;
 
 
-double step =0.001;
+//double step =0.001;
 double y;
 
-
-
-inline double my_function1(int x, double cock_x,double cock_y) {
+inline double my_function1(double x, double cock_x,double cock_y) {
 	return cos(2*Pi*x/cock_x)*cock_y;
 }
-inline double my_function2(int x, double cock_x,double cock_y) {//не подогнал
-	auto cock =  ( pow(x, 3)*5 + pow(x, 2)+ 5) /cock_x ;
+inline double my_function2(double x, double cock_x,double cock_y) {//не подогнал
+	auto cock =  ( pow(x/3, 3)*5.0/cock_x + pow(x, 2)/ cock_x + 5.0);
 	return cock/ cock_y;
 }
-inline double my_function3(int x, double cock_x,double cock_y) {
-	auto cock = sin(2.0 * Pi*(x / cock_x))*x/cock_x;
+inline double my_function3(double x, double cock_x,double cock_y) {
+	double cock = sin(2.0 * Pi*(x / cock_x))*x/cock_x;
 	return cock*cock_y ;
 }
 //теперь функция, которая рисует полином этот
-inline double polynom(double vec_sol[], int sizeOfMatrix, double cock_x) {
+inline double polynom(double vec_sol[], int sizeOfMatrix, double cock_x, double x) {
 	double polynom=0;
 	for (int i = 0; i < sizeOfMatrix; i++) {
-		polynom += pow(vec_sol[i], sizeOfMatrix - i)/cock_x;
+		polynom += vec_sol[i]*pow(x/3, i)/cock_x;
 	}
-	return polynom*cock_y;
+	return polynom/cock_y;
+}
+
+double* Gauss(double** matrix, int n) {
+	//Метод Гаусса
+	//Прямой ход, приведение к верхнетреугольному виду
+	int i, j, k;
+	double tmp;
+	double* vec_sol = new double[n];
+
+	for (i = 0; i<n; i++)
+	{
+		tmp = matrix[i][i];//Элемент на главной диагонали
+		for (j = n + 1; j >= i; j--)//приведение элемента главной диагонали к 1, деление элементов строки
+			matrix[i][j] /= tmp;
+		for (j = i + 1; j<n; j++)
+		{
+			tmp = matrix[j][i];//зануление столбцов под главной диагональю
+			for (k = n; k >= i; k--)
+				matrix[j][k] -= tmp * matrix[i][k];
+		}
+	}
+	//имеем верхнетреугольную матрицу с правым столбиком
+	/*обратный ход*/
+	vec_sol[n - 1] = matrix[n - 1][n];
+	for (i = n - 2; i >= 0; i--)
+	{
+		vec_sol[i] = matrix[i][n];
+		for (j = i + 1; j<n; j++)
+			vec_sol[i] -= matrix[i][j] * vec_sol[j];
+	}
+	return vec_sol;
+}
+
+void logging(int sizeOfMatrix, std::ofstream& loggi, double** matrix) {
+	for (int i = 0; i < sizeOfMatrix; i++) {
+		for (int j = 0; j < sizeOfMatrix + 1; j++) {
+			loggi << matrix[i][j] << " ";
+		}
+		loggi << std::endl;
+	}
+	loggi << std::endl;
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
@@ -88,17 +129,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		SelectObject(hdc, hPen);
 		cock_x = cxClient;
 		cock_y = cyClient / 2;
-		MoveToEx(hdc, -cxClient, my_function2(-cxClient, cock_x, cock_y), NULL);//устанавливаем начальную позицию
+		MoveToEx(hdc, -cxClient, (int)my_function2(-cxClient, cock_x, cock_y), NULL);//устанавливаем начальную позицию
 		for (int i = -cxClient; i < cxClient; i++)//рисуем график функции
 		{
-			int y = my_function2(i, cock_x, cock_y);
+			double y = my_function2(i, cock_x, cock_y);
 			LineTo(hdc, i, (int)y);
 		}
 
 		for (int i = 0; i < ssize; i++)//генерируем точки для метода
 		{
 			xx[i] = rand() % cxClient * 2 - cxClient;// x координата точки из выборки
-			int mis = 0;
+			double mis = 0;
 			if (rand() % 100 < chicken)//если случайно число меньше наперёд заданного
 			{
 				if (distribution == 1)//равномерная ошибка
@@ -132,7 +173,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			DeleteObject(hPen);
 		}
 
-		int power_of_polynom = 3;//полином 3й степени, от 0 до 3 степени
+		
 		const int sizeOfMatrix = power_of_polynom + 1;
 		double** matrix = new double*[sizeOfMatrix];
 		for (int i = 0; i < sizeOfMatrix; i++) {
@@ -157,55 +198,54 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			for (int k = 0; k < ssize; k++)
 				matrix[i][sizeOfMatrix] += yy[k] * pow(xx[k], i);
 		}
+		//логирование
+		logging(sizeOfMatrix, loggi, matrix);
+		double* vec_sol = Gauss(matrix, sizeOfMatrix);
+		logging(sizeOfMatrix,loggi,matrix);
 
-		 //Метод Гаусса
-		 //Прямой ход, приведение к верхнетреугольному виду
-		int i,j,k;
-		double tmp;
-		double* vec_sol = new double[sizeOfMatrix];
+		//регуляризация
+		for (int i = 0; i < sizeOfMatrix; i++) {
+			matrix[i][i] += lambda;
+		}
 
-		for (i = 0; i<sizeOfMatrix; i++)
-		{
-			 tmp = matrix[i][i];//Элемент на главной диагонали
-			 for (j = sizeOfMatrix +1; j >= i; j--)//приведение элемента главной диагонали к 1, деление элементов строки
-				 matrix[i][j] /= tmp; 
-			 for (j = i + 1; j<sizeOfMatrix; j++)
-			 {
-				 tmp = matrix[j][i];//зануление столбцов под главной диагональю
-				 for (k = sizeOfMatrix; k >= i; k--)
-					 matrix[j][k] -= tmp * matrix[i][k];
-			 }
-		 }
-		 //имеем верхнетреугольную матрицу с правым столбиком
-		 /*обратный ход*/
-		 vec_sol[sizeOfMatrix - 1] = matrix[sizeOfMatrix-1][sizeOfMatrix];
-		 for (i = sizeOfMatrix - 2; i >= 0; i--)
-		 {
-			 vec_sol[i] = matrix[i][sizeOfMatrix];
-			 for (j = i + 1; j<sizeOfMatrix; j++)
-				 vec_sol[i] -= matrix[i][j] * vec_sol[j];
-		 }
-		 
+		double* vec_sol_reg = new double[sizeOfMatrix];
+		vec_sol_reg = Gauss(matrix, sizeOfMatrix);
+
+		 //Выводим решения
 		 for (int i = 0; i < sizeOfMatrix; i++) {
-			 for (int j = 0; j < sizeOfMatrix + 1; j++) {
-				 loggi << matrix[i][j] << " ";
-			 }
-			 loggi << std::endl;
+			 loggi << vec_sol[i] << " ";
 		 }
 		 loggi << std::endl;
-		 //Выводим решения
-		 for (i = 0; i < sizeOfMatrix; i++) {
-			 loggi << vec_sol[i] << " ";
+		 for (int i = 0; i < sizeOfMatrix; i++) {
+			 loggi << vec_sol_reg[i] << " ";
 		 }
 		 loggi.close();
 
-		 hBrush = CreateSolidBrush( RGB(50, 255, 50));
-		 MoveToEx(hdc, -cxClient, polynom(vec_sol,sizeOfMatrix,cock_x), NULL);//устанавливаем начальную позицию
+		 hPen = CreatePen(PS_SOLID, 0, RGB(0, 255, 0));
+		 hPenOld = (HPEN)SelectObject(hdc, hPen);
+		 hBrush = CreateSolidBrush( RGB(0, 255, 0));
+		 hBrushOld = (HBRUSH)SelectObject(hdc, hBrush);
+
+		 MoveToEx(hdc, -cxClient, (int)polynom(vec_sol,sizeOfMatrix,cock_x,-cxClient), NULL);//устанавливаем начальную позицию
 		 for (int i = -cxClient; i < cxClient; i++)//рисуем график функции
 		 {
-			 int y = polynom(vec_sol, sizeOfMatrix,cock_x);
-			 LineTo(hdc, i, (int)y);
+			 double y = polynom(vec_sol, sizeOfMatrix,cock_x,i);
+			 LineTo(hdc, i, y);
 		 }
+
+
+
+		 hPen = CreatePen(PS_SOLID, 0, RGB(0, 0, 0));
+		 hPenOld = (HPEN)SelectObject(hdc, hPen);
+		 hBrush = CreateSolidBrush(RGB(0, 0, 0));
+		 hBrushOld = (HBRUSH)SelectObject(hdc, hBrush);
+		 MoveToEx(hdc, -cxClient, (int)polynom(vec_sol_reg, sizeOfMatrix, cock_x, -cxClient), NULL);//устанавливаем начальную позицию
+		 for (int i = -cxClient; i < cxClient; i++)//рисуем график функции
+		 {
+			 double y = polynom(vec_sol_reg, sizeOfMatrix, cock_x, i);
+			 LineTo(hdc, i, y);
+		 }
+
 
 
 		 /*for (int i = 0; i < sizeOfMatrix; i++) {
